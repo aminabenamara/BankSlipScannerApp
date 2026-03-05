@@ -12,8 +12,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseInMemoryDatabase("BankTestDb"));
 
-// 2. ✅ ENREGISTREMENT DU SERVICE (LA LIGNE MANQUANTE !)
+// 2. ENREGISTREMENT DU SERVICE (LA LIGNE MANQUANTE !)
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IPasswordService, PasswordService>();
 
 // 3. Configuration JWT
 builder.Services.AddAuthentication(options =>

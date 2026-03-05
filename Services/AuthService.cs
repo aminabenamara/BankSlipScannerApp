@@ -3,25 +3,25 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.IdentityModel.Tokens;
-using BankSlipScannerApp.DTOs;   // AuthResultDto, UserDto, LoginDto, RegisterDto
-using BankSlipScannerApp.Models; // User
+using BankSlipScannerApp.DTOs;   
+using BankSlipScannerApp.Models; 
 
 namespace BankSlipScannerApp.Services
 {
-    // ─── INTERFACE ────────────────────────────────────────────────────────────
+    // INTERFACE
     public interface IAuthService
     {
         Task<AuthResultDto> LoginAsync(LoginDto request);
         Task<AuthResultDto> RegisterAsync(RegisterDto request);
     }
 
-    // ─── IMPLÉMENTATION ───────────────────────────────────────────────────────
+    // IMPLÉMENTATION
     public class AuthService : IAuthService
     {
         private readonly IConfiguration _config;
 
         // Simulation d'une base de données en mémoire
-        // → Remplacer par AppDbContext (Entity Framework) en production
+       
         private static readonly List<User> _users = new()
         {
             new User
@@ -77,7 +77,7 @@ namespace BankSlipScannerApp.Services
             };
         }
 
-        // ─── REGISTER ─────────────────────────────────────────────────────────
+        //  REGISTER 
         public async Task<AuthResultDto> RegisterAsync(RegisterDto request)
         {
             await Task.CompletedTask;
@@ -89,10 +89,10 @@ namespace BankSlipScannerApp.Services
             if (emailExists)
                 return new AuthResultDto { Success = false, Message = "Cet email est déjà utilisé." };
 
-            // Générer un salt aléatoire séparé (en plus du salt intégré BCrypt)
+            // Générer un salt aléatoire séparé 
             string separateSalt = GenerateSalt();
 
-            // Hasher le mot de passe avec BCrypt (work factor = 12, salt intégré automatiquement)
+            // Hasher le mot de passe avec BCrypt 
             string passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password, workFactor: 12);
 
             var newUser = new User
@@ -115,7 +115,7 @@ namespace BankSlipScannerApp.Services
             };
         }
 
-        // ─── GÉNÉRATION DU TOKEN JWT ──────────────────────────────────────────
+        //  GÉNÉRATION DU TOKEN JWT
         private string GenerateJwtToken(User user, bool rememberMe)
         {
             var jwtSettings = _config.GetSection("JwtSettings");
@@ -152,7 +152,7 @@ namespace BankSlipScannerApp.Services
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
-        // ─── GÉNÉRATION D'UN SALT ALÉATOIRE (32 bytes) ───────────────────────
+        //  un  SALT ALÉATOIRE (32 bytes) 
         private static string GenerateSalt()
         {
             var saltBytes = new byte[32];
