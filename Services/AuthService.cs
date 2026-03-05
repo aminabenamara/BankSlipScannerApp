@@ -2,9 +2,11 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using BankSlipScannerApp.DTOs;   
-using BankSlipScannerApp.Models; 
+using BankSlipScannerApp.Data;
+using BankSlipScannerApp.DTOs;
+using BankSlipScannerApp.Models;
 
 namespace BankSlipScannerApp.Services
 {
@@ -19,35 +21,20 @@ namespace BankSlipScannerApp.Services
     public class AuthService : IAuthService
     {
         private readonly IConfiguration _config;
+        private readonly AppDbContext _context; // ← Vraie base de données
 
-        // Simulation d'une base de données en mémoire
-       
-        private static readonly List<User> _users = new()
-        {
-            new User
-            {
-                Id = 1,
-                NomComplet = "Administrateur",
-                Email = "admin@lynx-erp.com",
-                // Mot de passe : "Admin1234!" hashé avec BCrypt
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin1234!"),
-                Role = "admin"
-            }
-        };
-
-        public AuthService(IConfiguration config)
+        public AuthService(IConfiguration config, AppDbContext context)
         {
             _config = config;
+            _context = context;
         }
 
         // ─── LOGIN ────────────────────────────────────────────────────────────
         public async Task<AuthResultDto> LoginAsync(LoginDto request)
         {
-            await Task.CompletedTask;
-
-            // 1. Rechercher l'utilisateur par email (insensible à la casse)
-            var user = _users.FirstOrDefault(u =>
-                u.Email.Equals(request.Email.Trim(), StringComparison.OrdinalIgnoreCase));
+            // 1. Rechercher l'utilisateur dans la base SQL Server
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.Email.ToLower() == request.Email.Trim().ToLower());
 
             // 2. Message générique pour ne pas divulguer si l'email existe
             if (user == null)
@@ -80,33 +67,34 @@ namespace BankSlipScannerApp.Services
         //  REGISTER 
         public async Task<AuthResultDto> RegisterAsync(RegisterDto request)
         {
-            await Task.CompletedTask;
-
-            // Vérifier si l'email existe déjà
-            bool emailExists = _users.Any(u =>
-                u.Email.Equals(request.Email.Trim(), StringComparison.OrdinalIgnoreCase));
+            // 1. Vérifier si l'email existe déjà dans la base
+            bool emailExists = await _context.Users
+                .AnyAsync(u => u.Email.ToLower() == request.Email.Trim().ToLower());
 
             if (emailExists)
                 return new AuthResultDto { Success = false, Message = "Cet email est déjà utilisé." };
 
-            // Générer un salt aléatoire séparé 
+            // 2. Générer un salt aléatoire
             string separateSalt = GenerateSalt();
 
-            // Hasher le mot de passe avec BCrypt 
+            // 3. Hasher le mot de passe avec BCrypt
             string passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password, workFactor: 12);
 
+            // 4. Créer le nouvel utilisateur
             var newUser = new User
             {
-                Id = _users.Count + 1,
                 NomComplet = request.NomComplet.Trim(),
                 Email = request.Email.Trim().ToLower(),
                 PasswordHash = passwordHash,
                 PasswordSalt = separateSalt,
                 Role = "user",
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                IsActive = true
             };
 
-            _users.Add(newUser);
+            // 5. Sauvegarder dans la base SQL Server
+            _context.Users.Add(newUser);
+            await _context.SaveChangesAsync();
 
             return new AuthResultDto
             {
@@ -127,10 +115,10 @@ namespace BankSlipScannerApp.Services
 
             var claims = new[]
             {
-                new Claim("userId",    user.Id.ToString()),
-                new Claim("nomComplet",user.NomComplet),
-                new Claim("email",     user.Email),
-                new Claim("role",      user.Role),
+                new Claim("userId",     user.Id.ToString()),
+                new Claim("nomComplet", user.NomComplet),
+                new Claim("email",      user.Email),
+                new Claim("role",       user.Role),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                 new Claim(JwtRegisteredClaimNames.Iat,
                     DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
@@ -152,7 +140,7 @@ namespace BankSlipScannerApp.Services
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
-        //  un  SALT ALÉATOIRE (32 bytes) 
+        // ─── GÉNÉRATION D'UN SALT ALÉATOIRE ──────────────────────────────────
         private static string GenerateSalt()
         {
             var saltBytes = new byte[32];
@@ -160,5 +148,8 @@ namespace BankSlipScannerApp.Services
             rng.GetBytes(saltBytes);
             return Convert.ToBase64String(saltBytes);
         }
+
+        // ─── ACCÈS PUBLIC À LA LISTE (pour PasswordService) ──────────────────
+        public static List<User> GetUsers() => new(); // Plus utilisé avec SQL Server
     }
 }

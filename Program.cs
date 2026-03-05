@@ -10,7 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // 1. Connexion DB (Mémoire RAM pour le test)
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseInMemoryDatabase("BankTestDb"));
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // 2. ENREGISTREMENT DU SERVICE (LA LIGNE MANQUANTE !)
 builder.Services.AddScoped<IAuthService, AuthService>();
