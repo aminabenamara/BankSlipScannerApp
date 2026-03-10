@@ -22,6 +22,108 @@ namespace BankSlipScannerApp.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("BankSlipScannerApp.Models.PdfTransaction", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal?>("Credit")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Date")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("DateValeur")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal?>("Debit")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Libelle")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("PdfUploadId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PdfUploadId");
+
+                    b.ToTable("PdfTransactions");
+                });
+
+            modelBuilder.Entity("BankSlipScannerApp.Models.PdfUpload", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Agence")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Banque")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Client")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Compte")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DateDebut")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("DateFin")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Devise")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("IBAN")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Message")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("NbTransactions")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PdfType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("RIB")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("SoldeDepart")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("SoldeFinal")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("Success")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("PdfUploads");
+                });
+
             modelBuilder.Entity("BankSlipScannerApp.Models.User", b =>
                 {
                     b.Property<int>("Id")
@@ -59,6 +161,17 @@ namespace BankSlipScannerApp.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("BankSlipScannerApp.Models.PdfTransaction", b =>
+                {
+                    b.HasOne("BankSlipScannerApp.Models.PdfUpload", "PdfUpload")
+                        .WithMany()
+                        .HasForeignKey("PdfUploadId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PdfUpload");
                 });
 #pragma warning restore 612, 618
         }

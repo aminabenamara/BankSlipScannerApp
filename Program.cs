@@ -8,15 +8,29 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Connexion DB (Mémoire RAM pour le test)
+// 1. CORS
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAngular", policy =>
+    {
+        policy.WithOrigins("http://localhost:4200")
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
+
+// 2. SQL Server
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// 2. ENREGISTREMENT DU SERVICE (LA LIGNE MANQUANTE !)
+// 3. Services Sprint 1
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPasswordService, PasswordService>();
 
-// 3. Configuration JWT
+// ✅ SPRINT 2 — Ligne 1 : Service PDF
+builder.Services.AddScoped<IPdfService, PdfService>();
+
+// 4. JWT
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -35,13 +49,19 @@ builder.Services.AddAuthentication(options =>
 });
 
 builder.Services.AddControllers();
+
+// ✅ SPRINT 2 — Ligne 2 : Taille max upload 10MB
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = 10 * 1024 * 1024;
+});
+
 builder.Services.AddEndpointsApiExplorer();
 
-// 4. Swagger avec bouton cadenas JWT
+// 5. Swagger
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "BankSlipScannerApp API", Version = "v1" });
-
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Description = "Entrez : Bearer {votre_token}",
@@ -75,7 +95,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-app.UseAuthentication(); // ← 1. Vérifie le token
-app.UseAuthorization();  // ← 2. Vérifie les droits
+app.UseCors("AllowAngular");
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapControllers();
 app.Run();

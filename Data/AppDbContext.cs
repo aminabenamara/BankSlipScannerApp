@@ -11,5 +11,7 @@ namespace BankSlipScannerApp.Data
         }
 
         public DbSet<User> Users { get; set; }
+        public DbSet<PdfUpload> PdfUploads { get; set; }
+        public DbSet<PdfTransaction> PdfTransactions { get; set; }
     }
 }
