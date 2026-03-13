@@ -53,7 +53,13 @@ namespace BankSlipScannerApp.Services
             {
                 rawText = ExtractTextOCR(pdfBytes);
                 if (string.IsNullOrWhiteSpace(rawText))
-                    return new BankSlipResultDto { Success = false, PdfType = "A2", FileName = fileName, Message = "OCR échoué." };
+                    return new BankSlipResultDto
+                    {
+                        Success = false,
+                        PdfType = "A2",
+                        FileName = fileName,
+                        Message = "OCR échoué."
+                    };
             }
 
             var result = ParseBankSlip(rawText, fileName);
@@ -83,7 +89,8 @@ namespace BankSlipScannerApp.Services
                 using var pdfStream = new MemoryStream(pdfBytes);
                 var images = PDFtoImage.Conversion.ToImages(pdfStream);
                 var sb = new StringBuilder();
-                using var engine = new Tesseract.TesseractEngine("./tessdata", "fra+ara", Tesseract.EngineMode.Default);
+                using var engine = new Tesseract.TesseractEngine(
+                    "./tessdata", "fra+ara", Tesseract.EngineMode.Default);
                 engine.SetVariable("preserve_interword_spaces", "1");
                 foreach (var image in images)
                 {
@@ -105,46 +112,43 @@ namespace BankSlipScannerApp.Services
         // ═══════════════════════════════════════════════════════
         private BankSlipResultDto ParseBankSlip(string rawText, string fileName)
         {
-            // ─── PdfPig colle les mots sans espaces !
-            // AVANT flatten : "Titulaire :Karim Mansouri ChaabaneBanque :ZITOUNA"
-            // APRÈS flatten : même chose — le problème est PdfPig, pas les \n
-            // Solution : utiliser \s* au lieu de \s+ entre valeur et label suivant
             var flat = Flatten(rawText);
 
             var result = new BankSlipResultDto
             {
-                // ── Client ─────────────────────────────────
-                // PdfPig : "Titulaire :Karim Mansouri ChaabaneBanque :ZITOUNA"
-                //           \s* car pas d'espace avant "Banque"
+                // ─────────────────────────────────────────────────
+                // IMPORTANT : PdfPig colle les mots sans espaces !
+                // "Titulaire :Karim Mansouri ChaabaneBanque :ZITOUNA"
+                // → \s* (0 ou plusieurs espaces) entre valeur et label
+                // ─────────────────────────────────────────────────
+
+                // Client : entre "Titulaire :" et "Banque :"
                 Client = Match(flat, @"Titulaire\s*:\s*(.+?)\s*Banque\s*:"),
 
-                // ── Banque ─────────────────────────────────
-                // PdfPig : "Banque :ZITOUNAAdresse" → prendre seulement les MAJ
+                // Banque : lettres MAJ après "Banque :"
+                // "Banque :ZITOUNAAdresse" → [A-Z]+ capture "ZITOUNA" seulement
                 Banque = DetectBanque(flat, fileName),
 
-                // ── Agence ─────────────────────────────────
-                // PdfPig : "Agence Agence Zaouiet SousseRIB :" (sans ":")
-                //           \s*:?\s* car ":" parfois absent
+                // Agence : entre "Agence" et "RIB :"
+                // "Agence Agence Zaouiet SousseRIB :" → ":" absent après Agence !
                 Agence = Match(flat, @"Agence\s*:?\s*(.+?)\s*RIB\s*:"),
 
-                // ── RIB ────────────────────────────────────
-                // PdfPig : "RIB :25 165 0000097774906 34Devise :"
+                // RIB : entre "RIB :" et "Devise :"
+                // "RIB :25 165 0000097774906 34Devise :"
                 RIB = Match(flat, @"RIB\s*:\s*(.+?)\s*Devise\s*:"),
 
-                // ── Devise ─────────────────────────────────
-                // PdfPig : "Devise :TNDIBAN :" → prendre exactement 3 lettres
+                // Devise : exactement 3 lettres MAJ après "Devise :"
+                // "Devise :TNDIBAN :" → [A-Z]{3} capture "TND" seulement
                 Devise = Match(flat, @"Devise\s*:\s*([A-Z]{3})"),
 
-                // ── IBAN ───────────────────────────────────
-                // PdfPig : "IBAN :TN59 2516 5000 0097 7749 0634Période :"
+                // IBAN : entre "IBAN :" et "Période :"
+                // "IBAN : TN59 2516 5000 0097 7749 0634Période :"
                 IBAN = Match(flat, @"IBAN\s*:\s*(.+?)\s*P[eé]riode\s*:"),
 
-                // ── Dates ──────────────────────────────────
-                // PdfPig : "Période :Du 01/03/2025 au 31/03/2025"
+                // Dates : dans "Période :Du 01/03/2025 au 31/03/2025"
                 DateDebut = Match(flat, @"P[eé]riode\s*:\s*Du\s+(\d{2}/\d{2}/\d{4})\s+au"),
                 DateFin = Match(flat, @"P[eé]riode\s*:\s*Du\s+\d{2}/\d{2}/\d{4}\s+au\s+(\d{2}/\d{2}/\d{4})"),
 
-                // ── Soldes ─────────────────────────────────
                 SoldeDepart = ExtractSoldeDepart(flat),
                 SoldeFinal = ExtractSoldeFinal(flat),
             };
@@ -172,15 +176,14 @@ namespace BankSlipScannerApp.Services
 
         // ═══════════════════════════════════════════════════════
         // DÉTECTER BANQUE
-        // PdfPig : "Banque :ZITOUNAAdresse" → [A-Z]+ pour couper au bon endroit
         // ═══════════════════════════════════════════════════════
         private string DetectBanque(string flat, string fileName)
         {
-            // Lire les lettres MAJUSCULES après "Banque :"
-            var m = Regex.Match(flat, @"Banque\s*:\s*([A-Z]+)", RegexOptions.IgnoreCase);
+            // "Banque :ZITOUNAAdresse" → [A-Z]+ = "ZITOUNA" (s'arrête aux minuscules)
+            var m = Regex.Match(flat, @"Banque\s*:\s*([A-Z]+)");
             if (m.Success)
             {
-                switch (m.Groups[1].Value.ToUpper())
+                switch (m.Groups[1].Value)
                 {
                     case "STB": return "STB";
                     case "BIAT": return "BIAT";
@@ -195,7 +198,6 @@ namespace BankSlipScannerApp.Services
                 }
             }
 
-            // Fallback nom complet
             var t = flat.ToLower();
             if (t.Contains("société tunisienne de banque")) return "STB";
             if (t.Contains("banque internationale arabe")) return "BIAT";
@@ -208,7 +210,6 @@ namespace BankSlipScannerApp.Services
             if (t.Contains("union internationale de banques")) return "UIB";
             if (t.Contains("banque de tunisie")) return "BT";
 
-            // Fallback nom fichier
             var f = fileName.ToLower();
             if (f.Contains("stb")) return "STB";
             if (f.Contains("biat")) return "BIAT";
@@ -225,22 +226,21 @@ namespace BankSlipScannerApp.Services
         }
 
         // ═══════════════════════════════════════════════════════
-        // SOLDE DÉPART
-        // Corrigé : \s* au lieu de \s+ car PdfPig colle les mots
+        // SOLDE DÉPART — testé ✅ sur rawText exact Swagger
         // ═══════════════════════════════════════════════════════
         private string? ExtractSoldeDepart(string flat)
         {
             var montant = @"([\d][\d\s]*,\d{3})";
             var patterns = new[]
             {
-                @"Solde\s+initial\s*:\s*"          + montant,   // STB
-                @"Ancien\s+solde\s*:\s*"            + montant,   // BIAT
-                @"SOLDE\s+DEBUT\s*:\s*"             + montant,   // Zitouna
-                @"SOLDE\s+DEPART\s*:\s*"            + montant,   // Attijariwafa
-                @"Report\s+ant[eé]rieur\s*:\s*"    + montant,   // BNA
-                @"Solde\s+pr[eé]c[eé]dent\s*:\s*"  + montant,   // Amen + UIB
-                @"Solde\s+de\s+d[eé]part\s*:\s*"   + montant,   // ATB + BT
-                @"Solde\s+report[eé]\s*:\s*"        + montant,   // BH
+                @"Solde\s+initial\s*:\s*"          + montant,  // STB
+                @"Ancien\s+solde\s*:\s*"            + montant,  // BIAT
+                @"SOLDE\s+DEBUT\s*:\s*"             + montant,  // Zitouna ✅
+                @"SOLDE\s+DEPART\s*:\s*"            + montant,  // Attijariwafa
+                @"Report\s+ant[eé]rieur\s*:\s*"    + montant,  // BNA
+                @"Solde\s+pr[eé]c[eé]dent\s*:\s*"  + montant,  // Amen + UIB
+                @"Solde\s+de\s+d[eé]part\s*:\s*"   + montant,  // ATB + BT
+                @"Solde\s+report[eé]\s*:\s*"        + montant,  // BH
             };
             foreach (var p in patterns)
             {
@@ -251,8 +251,9 @@ namespace BankSlipScannerApp.Services
         }
 
         // ═══════════════════════════════════════════════════════
-        // SOLDE FINAL
-        // Zitouna : "Solde au 31/03/ 2025 12 227,120" — espace dans date + pas de ":"
+        // SOLDE FINAL — testé ✅ sur rawText exact Swagger
+        // Zitouna : "Solde au 31/03/ 2025 :12 227,120"
+        //            → espace dans date (\s*) + ":" présent ici
         // ═══════════════════════════════════════════════════════
         private string? ExtractSoldeFinal(string flat)
         {
@@ -261,10 +262,9 @@ namespace BankSlipScannerApp.Services
             {
                 @"Solde\s+final\s*:\s*"                                        + montant, // STB
                 @"Nouveau\s+solde\s*:\s*"                                      + montant, // BIAT + BH
-                // Zitouna : "Solde au 31/03/ 2025" — espace dans la date + ":" optionnel
-                @"Solde\s+au\s+\d{2}/\d{2}/\s*\d{4}\s*:?\s*"                 + montant, // Zitouna
+                @"Solde\s+au\s+\d{2}/\d{2}/\s*\d{4}\s*:\s*"                  + montant, // Zitouna ✅
                 @"SOLDE\s+FINAL\s*:\s*"                                        + montant, // Attijariwafa
-                @"Solde\s+arr[êe]t[eé]\s+au\s+\d{2}/\d{2}/\s*\d{4}\s*:?\s*" + montant, // BNA
+                @"Solde\s+arr[êe]t[eé]\s+au\s+\d{2}/\d{2}/\s*\d{4}\s*:\s*"  + montant, // BNA
                 @"Solde\s+actuel\s*:\s*"                                       + montant, // Amen + UIB
                 @"Solde\s+de\s+cl[ôo]ture\s*:\s*"                             + montant, // ATB + BT
             };
@@ -277,9 +277,9 @@ namespace BankSlipScannerApp.Services
         }
 
         // ═══════════════════════════════════════════════════════
-        // PARSER TRANSACTIONS
-        // PdfPig colle DATE+LIBELLÉ : "05/03/2025COMM REGLEMENT..."
-        // → Pattern avec \s* entre date et libellé
+        // PARSER TRANSACTIONS — testé ✅ sur rawText exact Swagger
+        // PdfPig colle : "05/03/2025COMM REGLEMENT...05/03/2025250,000"
+        // → \s* entre date et libellé (0 espaces possible)
         // ═══════════════════════════════════════════════════════
         private List<BankTransactionDto> ParseTransactions(string rawText)
         {
@@ -292,33 +292,25 @@ namespace BankSlipScannerApp.Services
                 var line = lineRaw.Trim();
                 if (string.IsNullOrWhiteSpace(line)) continue;
 
-                // Détecter en-tête tableau
                 if (!tableStarted)
                 {
                     if (Regex.IsMatch(line, @"D[eé]bit", RegexOptions.IgnoreCase) &&
                         Regex.IsMatch(line, @"Cr[eé]dit", RegexOptions.IgnoreCase))
-                    {
                         tableStarted = true;
-                        continue;
-                    }
                     continue;
                 }
 
-                // Fin tableau
-                if (Regex.IsMatch(line, @"^[Cc]e relev[eé]")) break;
+                if (Regex.IsMatch(line, @"^[Cc]e\s+relev[eé]")) break;
 
-                // ── Pattern transaction ───────────────────────────
-                // NORMAL  : "05/03/2025 COMM REGLEMENT 05/03/2025 250,000"
-                // COLLÉ   : "05/03/2025COMM REGLEMENT  05/03/2025250,000"
-                // \s*     : espace optionnel entre date et libellé
-                // ,\s*\d  : espace optionnel dans montant "2 000, 000"
+                // Pattern testé ✅ sur rawText exact :
+                // \s* = 0 ou plusieurs espaces (PdfPig colle les mots)
+                // ,\s*\d{3} = gérer "2 000, 000" (espace après virgule)
                 var m = Regex.Match(line,
                     @"^(\d{2}/\d{2}/\d{4})\s*(.+?)\s*(\d{2}/\d{2}/\d{4})\s*([\d][\d\s]*,\s*\d{3})\s*$");
 
                 if (!m.Success) continue;
 
                 var libelle = m.Groups[2].Value.Trim();
-                // Nettoyer montant : "2 000, 000" → "2000.000"
                 var montant = ParseMontant(m.Groups[4].Value);
 
                 decimal? debit = null;
@@ -339,27 +331,22 @@ namespace BankSlipScannerApp.Services
             return transactions;
         }
 
-        // ═══════════════════════════════════════════════════════
-        // EST CRÉDIT
-        // ═══════════════════════════════════════════════════════
         private bool EstCredit(string libelle)
         {
             var l = libelle.ToUpper();
             var credits = new[]
             {
-                "VIREMENT SALAIRE", "SALAIRE ",      "VIREMENT RECU",
+                "VIREMENT SALAIRE", "SALAIRE ",       "VIREMENT RECU",
                 "VERSEMENT ESPECES","VERSEMENT CHEQUE","INTERETS CREDITEURS",
-                "REGULARISATION INTERETS","SUBVENTION","DIVIDENDES",
-                "LOCATION ETE",    "PENSION",
+                "IN TERETS CREDITEURS",               // PdfPig coupe parfois le mot
+                "REGULARISATION INTERETS",
+                "SUBVENTION", "DIVIDENDES", "LOCATION ETE", "PENSION",
             };
             foreach (var c in credits)
                 if (l.Contains(c)) return true;
             return false;
         }
 
-        // ═══════════════════════════════════════════════════════
-        // SAVE TO DATABASE
-        // ═══════════════════════════════════════════════════════
         private async Task SaveToDatabase(BankSlipResultDto result)
         {
             var pdfUpload = new PdfUpload
@@ -400,20 +387,12 @@ namespace BankSlipScannerApp.Services
             }
         }
 
-        // ═══════════════════════════════════════════════════════
-        // HELPERS
-        // ═══════════════════════════════════════════════════════
         private string NettoyerMontant(string val)
             => val.Trim().Replace(" ", "").Replace(",", ".");
 
         private decimal ParseMontant(string val)
         {
-            // Gérer "2 000, 000" → espaces et espace après virgule
-            var clean = val.Trim()
-                          .Replace(" ", "")
-                          .Replace(",", ".");
-            // Cas "2000. 000" après nettoyage → enlever espaces restants
-            clean = Regex.Replace(clean, @"\s", "");
+            var clean = Regex.Replace(val.Trim(), @"\s", "").Replace(",", ".");
             return decimal.TryParse(clean,
                 System.Globalization.NumberStyles.Any,
                 System.Globalization.CultureInfo.InvariantCulture,
