@@ -14,5 +14,9 @@
         // Lié au PdfUpload
         public int PdfUploadId { get; set; }
         public PdfUpload? PdfUpload { get; set; }
+        // lié Validation
+        public bool IsModified { get; set; } = false;
+        public DateTime? ModifiedAt { get; set; }
     }
+
 }

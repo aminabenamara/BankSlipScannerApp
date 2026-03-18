@@ -1,4 +1,6 @@
-﻿namespace BankSlipScannerApp.Models
+﻿using System.Collections.Generic;
+
+namespace BankSlipScannerApp.Models
 {
     public class PdfUpload
     {
@@ -6,7 +8,7 @@
 
         // Infos du fichier
         public string FileName { get; set; } = "";
-        public string PdfType { get; set; } = "";   // "A1" ou "A2"
+        public string PdfType { get; set; } = "";
 
         // Infos bancaires extraites
         public string? IBAN { get; set; }
@@ -28,14 +30,23 @@
         // Nombre de transactions extraites
         public int NbTransactions { get; set; }
 
-        // Statut du traitement
+        // Statut du traitement PDF
         public bool Success { get; set; }
         public string? Message { get; set; }
 
         // Date d'upload
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-        // Lié à l'utilisateur qui a uploadé
+        // Lié à l'utilisateur
         public int UserId { get; set; }
+
+        // Sprint 3 : Validation
+        public string? Statut { get; set; } = "EnAttente";
+        public DateTime? ValidatedAt { get; set; }
+        public string? RejectReason { get; set; }
+
+        // Navigation (remplace l'ancien "object Transactions")
+        public ICollection<PdfTransaction> Transactions { get; set; }
+            = new List<PdfTransaction>();
     }
 }
